@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SnoreGuard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #12151c;
+    --border: #1e2330;
+    --accent: #4fffb0;
+    --accent-dim: #1a4d38;
+    --warn: #ff6b4a;
+    --warn-dim: #4d1f14;
+    --text: #e8eaf0;
+    --muted: #5a6070;
+    --ring-size: 200px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,255,176,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,255,176,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    padding: 0 20px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+
+  /* Header */
+  header {
+    width: 100%;
+    padding: 32px 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+
+  .tagline {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Central ring visualizer */
+  .ring-container {
+    position: relative;
+    width: var(--ring-size);
+    height: var(--ring-size);
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ring-outer {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    transition: border-color 0.3s;
+  }
+
+  .ring-pulse {
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    transition: all 0.3s;
+  }
+
+  .ring-pulse-2 {
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    transition: all 0.3s;
+  }
+
+  .ring-inner {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    position: relative;
+    z-index: 2;
+    cursor: pointer;
+    transition: border-color 0.3s, transform 0.15s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ring-inner:active { transform: scale(0.97); }
+
+  .ring-inner.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px rgba(79,255,176,0.1);
+  }
+
+  .ring-inner.snoring {
+    border-color: var(--warn);
+    box-shadow: 0 0 30px rgba(255,107,74,0.2);
+  }
+
+  .status-icon {
+    font-size: 36px;
+    line-height: 1;
+    transition: all 0.3s;
+  }
+
+  .status-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.3s;
+  }
+
+  .ring-inner.active .status-text { color: var(--accent); }
+  .ring-inner.snoring .status-text { color: var(--warn); }
+
+  /* Waveform canvas */
+  canvas {
+    width: 100%;
+    height: 70px;
+    display: block;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  /* Stats grid */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--text);
+    line-height: 1;
+    transition: color 0.3s;
+  }
+
+  .stat-value.warn { color: var(--warn); }
+  .stat-value.ok { color: var(--accent); }
+
+  .stat-unit {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  /* dB meter bar */
+  .db-bar-container {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .db-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .db-bar-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .db-bar-value {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--text);
+    transition: color 0.2s;
+  }
+
+  .db-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .db-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 0.1s, background 0.3s;
+    width: 0%;
+  }
+
+  .db-fill.warn { background: var(--warn); }
+
+  /* Notification permission */
+  .notif-banner {
+    width: 100%;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: opacity 0.3s;
+  }
+
+  .notif-banner.granted {
+    background: #0d2e1e;
+    border-color: var(--accent);
+    cursor: default;
+  }
+
+  .notif-banner.denied {
+    background: var(--warn-dim);
+    border-color: var(--warn);
+    cursor: default;
+  }
+
+  .notif-icon { font-size: 20px; flex-shrink: 0; }
+
+  .notif-text { flex: 1; }
+  .notif-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+  .notif-banner.denied .notif-title { color: var(--warn); }
+
+  .notif-sub {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Log */
+  .log-section {
+    width: 100%;
+  }
+
+  .log-header {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding-left: 2px;
+  }
+
+  .log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .log-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    animation: slideIn 0.3s ease;
+  }
+
+  .log-item.snore { border-left: 3px solid var(--warn); }
+  .log-item.clear { border-left: 3px solid var(--accent); }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .log-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .log-item.snore .log-dot { background: var(--warn); }
+  .log-item.clear .log-dot { background: var(--accent); }
+
+  .log-time { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+  .log-msg { flex: 1; color: var(--text); }
+  .log-db { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+
+  .log-empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 20px;
+  }
+
+  /* Threshold control */
+  .threshold-control {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .threshold-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .threshold-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .threshold-val {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+  }
+
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(79,255,176,0.4);
+  }
+
+  /* Active ring animations */
+  @keyframes pulseRing {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.06); opacity: 0; }
+  }
+
+  @keyframes snoreAlert {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+
+  .ring-inner.snoring { animation: snoreAlert 0.6s ease infinite; }
+
+  .listening .ring-pulse {
+    border-color: rgba(79,255,176,0.3);
+    animation: pulseRing 2s ease-out infinite;
+  }
+
+  .listening .ring-pulse-2 {
+    border-color: rgba(79,255,176,0.15);
+    animation: pulseRing 2s ease-out 0.5s infinite;
+  }
+
+  .snoring-active .ring-pulse {
+    border-color: rgba(255,107,74,0.4);
+    animation: pulseRing 0.8s ease-out infinite;
+  }
+
+  .snoring-active .ring-pulse-2 {
+    border-color: rgba(255,107,74,0.2);
+    animation: pulseRing 0.8s ease-out 0.2s infinite;
+  }
+
+  /* Instructions */
+  .instructions {
+    width: 100%;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.7;
+    text-align: center;
+    padding: 0 10px;
+  }
+
+  /* Scrollbar */
+  .log-list::-webkit-scrollbar { width: 3px; }
+  .log-list::-webkit-scrollbar-track { background: transparent; }
+  .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">SnoreGuard</div>
+    <div class="tagline">Sleep Audio Monitor</div>
+  </header>
+
+  <!-- Notification permission banner -->
+  <div class="notif-banner" id="notifBanner" onclick="requestNotifPermission()">
+    <div class="notif-icon">🔔</div>
+    <div class="notif-text">
+      <div class="notif-title" id="notifTitle">Enable Notifications</div>
+      <div class="notif-sub" id="notifSub">Required to alert your Garmin watch when snoring is detected</div>
+    </div>
+  </div>
+
+  <!-- Central ring -->
+  <div class="ring-container" id="ringContainer">
+    <div class="ring-outer"></div>
+    <div class="ring-pulse"></div>
+    <div class="ring-pulse-2"></div>
+    <div class="ring-inner" id="ringBtn" onclick="toggleMonitoring()">
+      <div class="status-icon" id="statusIcon">🌙</div>
+      <div class="status-text" id="statusText">TAP TO START</div>
+    </div>
+  </div>
+
+  <!-- Waveform -->
+  <canvas id="waveform"></canvas>
+
+  <!-- dB Meter -->
+  <div class="db-bar-container">
+    <div class="db-bar-header">
+      <div class="db-bar-label">Sound Level</div>
+      <div class="db-bar-value" id="dbValue">-- dB</div>
+    </div>
+    <div class="db-track">
+      <div class="db-fill" id="dbFill"></div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Snore Events</div>
+      <div class="stat-value warn" id="snoreCount">0</div>
+      <div class="stat-unit">tonight</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Last Event</div>
+      <div class="stat-value" id="lastEvent" style="font-size:14px">--:--</div>
+      <div class="stat-unit">time</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Peak dB</div>
+      <div class="stat-value" id="peakDb">--</div>
+      <div class="stat-unit">decibels</div>
+    </div>
+  </div>
+
+  <!-- Threshold -->
+  <div class="threshold-control">
+    <div class="threshold-header">
+      <div class="threshold-label">Snore Threshold</div>
+      <div class="threshold-val" id="thresholdDisplay">55 dB</div>
+    </div>
+    <input type="range" id="thresholdSlider" min="40" max="80" value="55"
+      oninput="updateThreshold(this.value)">
+  </div>
+
+  <!-- Log -->
+  <div class="log-section">
+    <div class="log-header">Event Log</div>
+    <div class="log-list" id="logList">
+      <div class="log-empty">No events recorded yet</div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    Place phone face-down near your pillow · Keep screen on · Garmin will receive alerts as notifications
+  </div>
+
+</div>
+
+<script>
+// === State ===
+let audioCtx = null;
+let analyser = null;
+let mediaStream = null;
+let animFrame = null;
+let isMonitoring = false;
+let isSnoring = false;
+let snoreStartTime = null;
+let lastNotifTime = 0;
+let snoreCount = 0;
+let peakDb = 0;
+let threshold = 55;
+let logEntries = [];
+const SNORE_HOLD_MS = 1500;  // must be loud for 1.5s to count
+const NOTIF_COOLDOWN_MS = 30000; // min 30s between notifications
+
+// === Canvas setup ===
+const canvas = document.getElementById('waveform');
+const ctx2d = canvas.getContext('2d');
+let dataArray = null;
+
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  ctx2d.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// === Notification permission ===
+function updateNotifBanner() {
+  const banner = document.getElementById('notifBanner');
+  const title = document.getElementById('notifTitle');
+  const sub = document.getElementById('notifSub');
+
+  if (!('Notification' in window)) {
+    title.textContent = 'Notifications Not Supported';
+    sub.textContent = 'Use Safari on iOS 16.4+ or add to Home Screen';
+    banner.classList.add('denied');
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    title.textContent = '✓ Notifications Enabled';
+    sub.textContent = 'Alerts will appear on your Garmin watch';
+    banner.classList.add('granted');
+  } else if (Notification.permission === 'denied') {
+    title.textContent = 'Notifications Blocked';
+    sub.textContent = 'Go to Settings → Safari → Notifications to enable';
+    banner.classList.add('denied');
+  }
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') return;
+  const result = await Notification.requestPermission();
+  updateNotifBanner();
+}
+
+updateNotifBanner();
+
+// === Threshold ===
+function updateThreshold(val) {
+  threshold = parseInt(val);
+  document.getElementById('thresholdDisplay').textContent = threshold + ' dB';
+}
+
+// === Toggle monitoring ===
+async function toggleMonitoring() {
+  if (isMonitoring) {
+    stopMonitoring();
+  } else {
+    await startMonitoring();
+  }
+}
+
+async function startMonitoring() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(mediaStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    source.connect(analyser);
+    dataArray = new Float32Array(analyser.fftSize);
+
+    isMonitoring = true;
+    updateUI('listening');
+    addLog('clear', 'Monitoring started');
+    drawLoop();
+  } catch (e) {
+    alert('Microphone access denied. Please allow microphone access in your browser settings.');
+  }
+}
+
+function stopMonitoring() {
+  isMonitoring = false;
+  isSnoring = false;
+  snoreStartTime = null;
+
+  if (animFrame) cancelAnimationFrame(animFrame);
+  if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+
+  analyser = null; dataArray = null;
+  updateUI('idle');
+  addLog('clear', 'Monitoring stopped');
+  clearCanvas();
+}
+
+// === Main audio loop ===
+function drawLoop() {
+  if (!isMonitoring) return;
+  animFrame = requestAnimationFrame(drawLoop);
+
+  analyser.getFloatTimeDomainData(dataArray);
+  const db = getDb(dataArray);
+  renderWaveform(dataArray);
+  updateDbMeter(db);
+
+  const now = Date.now();
+
+  if (db >= threshold) {
+    if (!snoreStartTime) snoreStartTime = now;
+    const holdTime = now - snoreStartTime;
+
+    if (holdTime >= SNORE_HOLD_MS && !isSnoring) {
+      // Snore detected!
+      isSnoring = true;
+      snoreCount++;
+      document.getElementById('snoreCount').textContent = snoreCount;
+      document.getElementById('lastEvent').textContent = timeStr();
+      updateUI('snoring');
+      addLog('snore', 'Snoring detected', Math.round(db));
+
+      if (now - lastNotifTime > NOTIF_COOLDOWN_MS) {
+        sendNotification(Math.round(db));
+        lastNotifTime = now;
+      }
+    }
+  } else {
+    if (isSnoring) {
+      isSnoring = false;
+      updateUI('listening');
+      addLog('clear', 'Snoring stopped', Math.round(db));
+    }
+    snoreStartTime = null;
+  }
+
+  if (db > peakDb) {
+    peakDb = db;
+    document.getElementById('peakDb').textContent = Math.round(peakDb);
+  }
+}
+
+function getDb(buffer) {
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
+  const rms = Math.sqrt(sum / buffer.length);
+  return rms > 0 ? 20 * Math.log10(rms) + 90 : 0; // offset to approx dB SPL
+}
+
+function renderWaveform(buffer) {
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  ctx2d.clearRect(0, 0, W, H);
+
+  const color = isSnoring ? '#ff6b4a' : '#4fffb0';
+  ctx2d.strokeStyle = color;
+  ctx2d.lineWidth = 1.5;
+  ctx2d.globalAlpha = 0.85;
+  ctx2d.shadowColor = color;
+  ctx2d.shadowBlur = 4;
+  ctx2d.beginPath();
+
+  const step = W / buffer.length;
+  for (let i = 0; i < buffer.length; i++) {
+    const x = i * step;
+    const y = (buffer[i] * H * 0.45) + H / 2;
+    i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+  }
+  ctx2d.stroke();
+  ctx2d.globalAlpha = 1;
+  ctx2d.shadowBlur = 0;
+}
+
+function clearCanvas() {
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.strokeStyle = '#1e2330';
+  ctx2d.lineWidth = 1;
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, H / 2);
+  ctx2d.lineTo(W, H / 2);
+  ctx2d.stroke();
+}
+
+function updateDbMeter(db) {
+  const clamped = Math.min(Math.max(db, 0), 100);
+  const pct = (clamped / 100) * 100;
+  const fill = document.getElementById('dbFill');
+  const val = document.getElementById('dbValue');
+  fill.style.width = pct + '%';
+  val.textContent = Math.round(db) + ' dB';
+
+  if (db >= threshold) {
+    fill.classList.add('warn');
+    val.style.color = 'var(--warn)';
+  } else {
+    fill.classList.remove('warn');
+    val.style.color = 'var(--text)';
+  }
+}
+
+// === Notification ===
+function sendNotification(db) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  new Notification('😴 Snoring Detected', {
+    body: `Sound level: ${db} dB — You are snoring. Try changing position.`,
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">😴</text></svg>',
+    tag: 'snoreguard',
+    requireInteraction: false,
+    silent: false
+  });
+}
+
+// === UI updates ===
+function updateUI(state) {
+  const ring = document.getElementById('ringBtn');
+  const icon = document.getElementById('statusIcon');
+  const text = document.getElementById('statusText');
+  const container = document.getElementById('ringContainer');
+
+  ring.className = 'ring-inner';
+  container.className = 'ring-container';
+
+  if (state === 'idle') {
+    icon.textContent = '🌙';
+    text.textContent = 'TAP TO START';
+  } else if (state === 'listening') {
+    ring.classList.add('active');
+    container.classList.add('listening');
+    icon.textContent = '👂';
+    text.textContent = 'LISTENING';
+  } else if (state === 'snoring') {
+    ring.classList.add('snoring');
+    container.classList.add('snoring-active');
+    icon.textContent = '😤';
+    text.textContent = 'SNORING!';
+  }
+}
+
+// === Log ===
+function addLog(type, msg, db) {
+  const entry = { type, msg, time: timeStr(), db };
+  logEntries.unshift(entry);
+  if (logEntries.length > 50) logEntries.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const list = document.getElementById('logList');
+  if (logEntries.length === 0) {
+    list.innerHTML = '<div class="log-empty">No events recorded yet</div>';
+    return;
+  }
+  list.innerHTML = logEntries.map(e => `
+    <div class="log-item ${e.type}">
+      <div class="log-dot"></div>
+      <div class="log-msg">${e.msg}</div>
+      ${e.db ? `<div class="log-db">${e.db} dB</div>` : ''}
+      <div class="log-time">${e.time}</div>
+    </div>
+  `).join('');
+}
+
+function timeStr() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Keep screen alive (for iOS, limited support)
+let wakeLock = null;
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (wakeLock !== null && document.visibilityState === 'visible' && isMonitoring) {
+    await requestWakeLock();
+  }
+});
+</script>
+</body>
